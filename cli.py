@@ -3,6 +3,21 @@ import os, sys, time, hmac, hashlib, requests, datetime as dt
 from dotenv import load_dotenv
 from prettytable import PrettyTable
 
+# ─── Helpers ──────────────────────────────────────────────
+def hr(width: int = 60):
+    print("━" * width)
+
+def title(text: str, width: int = 60):
+    print(text)
+    print("━" * width)
+
+def kv(label: str, value: str):
+    print(f"{label:<28}: {value}")
+
+def bullet(ok: bool, text: str):
+    print(("✔ " if ok else "⚠ ") + text)
+
+# ─── API setup ─────────────────────────────────────────────
 load_dotenv()
 API_KEY    = os.getenv("MEXC_API_KEY")
 API_SECRET = os.getenv("MEXC_API_SECRET")
@@ -38,7 +53,8 @@ def normalize_symbol(sym: str) -> str:
     s = sym.upper()
     return s if s.endswith("USDT") else s + "USDT"
 
-def show_trades(symbol, trades, tp_pct: float = 20.0, sl_pct: float = 10.0):
+# ─── Main logic ────────────────────────────────────────────
+def show_trades(symbol, trades):
     trades = sorted(trades, key=lambda t: t["time"])
     total_qty = 0.0
     total_cost = 0.0
@@ -64,7 +80,6 @@ def show_trades(symbol, trades, tp_pct: float = 20.0, sl_pct: float = 10.0):
                 total_cost -= avg * qty
                 returned += quote
 
-    mkt = None
     if total_qty > 0:
         avg = total_cost / total_qty
         mkt = get_last_price(symbol)
@@ -72,25 +87,52 @@ def show_trades(symbol, trades, tp_pct: float = 20.0, sl_pct: float = 10.0):
         unreal_pnl = (mkt - avg) * total_qty
         total_pnl = realized_pnl + unreal_pnl
         roi_total = (realized_pnl + unreal_pnl) / invested * 100.0 if invested else 0.0
-        print(f"Монета: {symbol}")
-        print(f"Текущая цена: {mkt:.6f}")
-        print(f"Средняя цена позиции: {avg:.6f} USDT")
-        print(f"Остаток монет: {total_qty:.8f}")
-        print("\n### Доходность")
-        print(f"- ROI позиции: {roi_pos:.2f}% (от средней цены позиции на текущей цене)")
-        print(f"- ROI общий (с учетом продаж): {roi_total:.2f}% (реализованный + нереализованный к сумме вложений)")
-        print(f"- PnL реализованный: {realized_pnl:.2f} USDT")
-        print(f"- PnL нереализованный: {unreal_pnl:.2f} USDT (по текущей цене на остатке)")
-        print(f"- PnL общий: {total_pnl:.2f} USDT (realized + unrealized)")
-    else:
-        roi_total = (realized_pnl / invested * 100.0) if invested else 0.0
-        print(f"Монета: {symbol} — позиция закрыта")
-        print(f"### Доходность (позиция закрыта)")
-        print(f"- ROI общий: {roi_total:.2f}% (только по реализованному)")
-        print(f"- PnL реализованный: {realized_pnl:.2f} USDT")
-        print(f"- Invested: {invested:.2f} USDT | Returned: {returned:.2f} USDT | Net Cash: {(returned - invested):.2f} USDT")
+        not_paid_back = max(0.0, invested - returned)
+
+        title(f"Монета: {symbol} | Позиция открыта")
+        kv("Текущая цена", f"{mkt:.6f} USDT")
+        kv("Средняя цена позиции", f"{avg:.6f} USDT")
+        kv("Остаток монет", f"{total_qty:.8f}")
         print()
 
+        title("📊 Доходность", width=40)
+        kv("ROI остатка", f"{roi_pos:.2f}%  (рост оставшихся монет)")
+        kv("ROI общий", f"{roi_total:.2f}%  (реализ.+нереализ. к вложениям)")
+        kv("PnL реализованный", f"{realized_pnl:.2f} USDT")
+        kv("PnL нереализованный", f"{unreal_pnl:.2f} USDT  (по текущей цене)")
+        kv("PnL общий", f"{total_pnl:.2f} USDT")
+        kv("Выведено (Returned)", f"{returned:.2f} USDT")
+        kv("Неотбито", f"{not_paid_back:.2f} USDT")
+        print()
+
+        title("🧠 Аналитика", width=40)
+        bullet(returned >= invested, "Позиция отбита кэшем" if returned >= invested else "Позиция ещё не отбита кэшем")
+        bullet(roi_pos > roi_total, "ROI остатка выше общего → остаток растёт быстрее всей сделки")
+        bullet(unreal_pnl > realized_pnl, "Нереализованной прибыли больше, чем реализованной — подумай о частичной фиксации")
+        print()
+    else:
+        roi_total_closed = (realized_pnl / invested * 100.0) if invested else 0.0
+
+        title(f"Монета: {symbol} | Позиция закрыта")
+        kv("Текущая цена", "—")
+        kv("Средняя цена позиции", "—")
+        kv("Остаток монет", "0.00000000")
+        print()
+
+        title("📊 Доходность (закрыто)", width=40)
+        kv("ROI общий", f"{roi_total_closed:.2f}%  (реализованный к вложениям)")
+        kv("PnL реализованный", f"{realized_pnl:.2f} USDT")
+        kv("Invested", f"{invested:.2f} USDT")
+        kv("Returned", f"{returned:.2f} USDT")
+        kv("Net Cash", f"{(returned - invested):.2f} USDT")
+        print()
+
+        title("🧠 Аналитика", width=40)
+        bullet(realized_pnl >= 0, "Сделка завершена в плюс" if realized_pnl >= 0 else "Сделка завершена в минус")
+        bullet(returned >= invested, "Капитал полностью возвращён" if returned >= invested else "Часть капитала не возвращена")
+        print()
+
+    # Таблица сделок
     table = PrettyTable()
     table.field_names = ["Time","Side","Price","Qty","Quote","ROI %","PnL","Left Qty","Avg Price"]
     left_qty, left_cost = 0.0, 0.0
