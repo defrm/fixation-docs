@@ -144,11 +144,11 @@ def print_report_formatted(symbol: str, trades: list, levels=None, trailing_pct:
 
     # ====== Блок «Доходность» ======
     print("### Доходность")
-    print(f"- ROI позиции: {roi_position:.2f}%")
-    print(f"- ROI общий (с учетом продаж): {roi_total:.2f}%")
+    print(f"- ROI позиции: {roi_position:.2f}% (от средней цены позиции на текущей цене)")
+    print(f"- ROI общий (с учетом продаж): {roi_total:.2f}% (реализованный + нереализованный к сумме вложений)")
     print(f"- PnL реализованный: {realized_pnl:.2f} USDT")
-    print(f"- PnL нереализованный: {unrealized_pnl:.2f} USDT")
-    print(f"- PnL общий: {pnl_total:.2f} USDT")
+    print(f"- PnL нереализованный: {unrealized_pnl:.2f} USDT (по текущей цене на остатке)")
+    print(f"- PnL общий: {pnl_total:.2f} USDT (realized + unrealized)")
     print()
 
     # ====== Таблица «ROI уровни фиксации» ======
